@@ -172,37 +172,26 @@ impl Slot {
 
     /// Build a Choice struct representing this slot's single remaining word.
     pub fn get_choice(&self, config: &GridConfig) -> Option<Choice> {
-        self.fixed_word_id
-            .map(|word_id| Choice {
+        // First check fixed_word_id
+        if let Some(word_id) = self.fixed_word_id {
+            return Some(Choice {
                 slot_id: self.id,
                 word_id,
-            })
-            .or_else(|| {
-                if self.remaining_option_count == 1 {
-                    #[cfg(feature = "check_invariants")]
-                    {
-                        assert_eq!(
-                            config.slot_options[self.id]
-                                .iter()
-                                .filter(|&&word_id| self.eliminations[word_id].is_none())
-                                .count(),
-                            1,
-                            "slot with one remaining option must have eliminations for all others"
-                        );
-                    }
+            });
+        }
 
-                    let word_id = config.slot_options[self.id]
-                        .iter()
-                        .find(|&&word_id| self.eliminations[word_id].is_none());
+        // Then check if we have exactly one remaining option
+        if self.remaining_option_count == 1 {
+            return config.slot_options[self.id]
+                .iter()
+                .find(|&&word_id| self.eliminations[word_id].is_none())
+                .map(|&word_id| Choice {
+                    slot_id: self.id,
+                    word_id,
+                });
+        }
 
-                    word_id.map(|&word_id| Choice {
-                        slot_id: self.id,
-                        word_id,
-                    })
-                } else {
-                    None
-                }
-            })
+        None
     }
 }
 

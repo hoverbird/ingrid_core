@@ -9,7 +9,8 @@ use std::io::Read;
 use std::time::SystemTime;
 use std::{fmt, fs, io, mem};
 use unicode_normalization::UnicodeNormalization;
-
+use web_sys::console;
+use wasm_bindgen::JsValue;
 use crate::dupe_index::{AnyDupeIndex, BoxedDupeIndex, DupeIndex};
 use crate::types::{GlobalWordId, GlyphId, WordId};
 use crate::MAX_SLOT_LENGTH;
@@ -218,26 +219,42 @@ fn parse_word_list_file_contents(
     index: &mut HashMap<String, usize>,
     errors: &mut Vec<WordListError>,
 ) -> Vec<RawWordListEntry> {
+    console::log_1(&JsValue::from_str(&format!("Parsing word list file contents with {} lines", file_contents.lines().count())));
+    
     let mut entries = Vec::with_capacity(file_contents.lines().count());
+    let mut line_count = 0;
+    let mut invalid_words = 0;
+    let mut empty_normalized = 0;
+    let mut duplicate_words = 0;
+    let mut invalid_scores = 0;
+    let mut successful_entries = 0;
 
     for line in file_contents.lines() {
+        line_count += 1;
         if errors.len() > 100 {
+            console::log_1(&JsValue::from_str("Too many errors (>100), stopping word list parsing"));
             break;
         }
 
         let line_parts: Vec<_> = line.split(';').collect();
+        if line_parts.is_empty() {
+            continue;
+        }
 
         if line_parts[0].chars().any(|c| c == '�') {
             errors.push(WordListError::InvalidWord(line_parts[0].into()));
+            invalid_words += 1;
             continue;
         }
 
         let canonical = line_parts[0].trim().to_string();
         let normalized = normalize_word(&canonical);
         if normalized.is_empty() {
+            empty_normalized += 1;
             continue;
         }
         if index.contains_key(&normalized) {
+            duplicate_words += 1;
             continue;
         }
 
@@ -246,7 +263,8 @@ fn parse_word_list_file_contents(
         } else {
             line_parts[1].trim().parse::<u16>()
         }) else {
-            errors.push(WordListError::InvalidScore(line_parts[1].into()));
+            errors.push(WordListError::InvalidScore(if line_parts.len() >= 2 { line_parts[1].into() } else { "missing".into() }));
+            invalid_scores += 1;
             continue;
         };
 
@@ -257,7 +275,18 @@ fn parse_word_list_file_contents(
             canonical,
             score,
         });
+        successful_entries += 1;
+        
+        // Print progress for large files
+        if successful_entries % 10000 == 0 {
+            console::log_1(&JsValue::from_str(&format!("Processed {} words so far...", successful_entries)));
+        }
     }
+
+    console::log_1(&JsValue::from_str(&format!(
+        "Word list parsing complete: {} lines processed, {} valid entries, {} errors ({} invalid words, {} empty, {} duplicates, {} invalid scores)",
+        line_count, successful_entries, errors.len(), invalid_words, empty_normalized, duplicate_words, invalid_scores
+    )));
 
     entries
 }
@@ -281,6 +310,13 @@ pub fn load_words_from_source(source: &WordListSourceConfig) -> RawWordListConte
     let mtime = source.modified();
     let mut index = HashMap::new();
     let mut errors = vec![];
+    
+    let source_info = match source {
+        WordListSourceConfig::Memory { id, enabled, .. } => format!("Memory source: id={}, enabled={}", id, enabled),
+        WordListSourceConfig::File { id, enabled, path } => format!("File source: id={}, enabled={}, path={:?}", id, enabled, path),
+        WordListSourceConfig::FileContents { id, enabled, .. } => format!("FileContents source: id={}, enabled={}", id, enabled),
+    };
+    console::log_1(&JsValue::from_str(&format!("Loading words from source: {}", source_info)));
 
     let entries = match source {
         WordListSourceConfig::Memory { words, .. } => {
@@ -320,6 +356,11 @@ pub fn load_words_from_source(source: &WordListSourceConfig) -> RawWordListConte
             parse_word_list_file_contents(contents, &mut index, &mut errors)
         }
     };
+    
+    console::log_1(&JsValue::from_str(&format!(
+        "Loaded {} entries from source, found {} errors",
+        entries.len(), errors.len()
+    )));
 
     RawWordListContents {
         entries,
@@ -439,6 +480,8 @@ impl WordList {
         max_length: Option<usize>,
         max_shared_substring: Option<usize>,
     ) -> WordList {
+        console::log_1(&JsValue::from_str("Starting WordList::new() initialization..."));
+        
         let mut instance = WordList {
             glyphs: vec![],
             glyph_id_by_char: HashMap::new(),
@@ -452,8 +495,28 @@ impl WordList {
             source_states: HashMap::new(),
             needs_sync: false,
         };
+        
+        console::log_1(&JsValue::from_str(&format!("WordList created with {} source configs", source_configs.len())));
+        for (i, source_config) in source_configs.iter().enumerate() {
+            let src_info = match source_config {
+                WordListSourceConfig::Memory { id, enabled, .. } => format!("Memory source: id={}, enabled={}", id, enabled),
+                WordListSourceConfig::File { id, enabled, path } => format!("File source: id={}, enabled={}, path={:?}", id, enabled, path),
+                WordListSourceConfig::FileContents { id, enabled, .. } => format!("FileContents source: id={}, enabled={}", id, enabled),
+            };
+            console::log_1(&JsValue::from_str(&format!("Source config #{}: {}", i, src_info)));
+        }
 
         instance.replace_list(source_configs, personal_list_index, max_length, false);
+        
+        console::log_1(&JsValue::from_str(&format!(
+            "WordList initialization complete: {} words loaded, {} unique glyphs", 
+            instance.word_id_by_string.len(),
+            instance.glyphs.len()
+        )));
+        
+        if instance.word_id_by_string.is_empty() {
+            console::log_1(&JsValue::from_str("WARNING: Word list is empty! Check source files and parsing logic."));
+        }
 
         instance
     }
@@ -575,8 +638,11 @@ impl WordList {
         max_length: Option<usize>,
         silent: bool,
     ) -> (bool, HashSet<GlobalWordId>) {
+        console::log_1(&JsValue::from_str("Starting WordList::replace_list()..."));
+        
         self.source_configs = source_configs;
         self.personal_list_index = personal_list_index;
+        self.max_length = max_length;
         self.max_length = max_length;
 
         // Start with the assumption that we're removing everything. This is for tracking
@@ -611,46 +677,20 @@ impl WordList {
 
         let mut hidden_personal_scores: HashMap<GlobalWordId, u16> = HashMap::new();
 
-        self.load_words_from_source_configs(
-            max_length,
-            |word_list, raw_entry, source_index| {
-                let word_length = raw_entry.length;
-                let existing_word_id = word_list.word_id_by_string.get(&raw_entry.normalized);
+        // Make sure we have enough buckets
+        if let Some(max_length) = max_length {
+            while self.words.len() < max_length + 1 {
+                self.words.push(vec![]);
+            }
+        }
 
-                if let Some(&existing_word_id) = existing_word_id {
-                    let word = &mut word_list.words[word_length][existing_word_id];
-                    if word.hidden || raw_entry.score > word.score {
-                        any_more_visible = true;
-                    }
-                    if !word.hidden && raw_entry.score < word.score {
-                        less_visible_words_set.insert((word_length, existing_word_id));
-                    }
-                    word.score = raw_entry.score;
-                    word.hidden = false;
-                    word.canonical_string.clone_from(&raw_entry.canonical);
-                    word.source_index = Some(source_index);
-                    word.personal_word_score =
-                        if personal_list_index.map_or(false, |idx| idx == source_index) {
-                            Some(raw_entry.score)
-                        } else {
-                            None
-                        };
-                    removed_words_set.remove(&(word_length, existing_word_id));
-                } else if !silent {
-                    any_more_visible = true;
-                    let added_word_id =
-                        word_list.add_word_silent(raw_entry, Some(source_index), false);
-                    newly_added_words.push(added_word_id);
-                } else {
-                    any_more_visible = true;
-                    word_list.add_word_silent(raw_entry, Some(source_index), false);
-                }
-            },
-            |word_list, raw_entry| {
-                let word_id = word_list.get_word_id_or_add_hidden(&raw_entry.normalized);
-                hidden_personal_scores.insert(word_id, raw_entry.score);
-            },
+        self.load_words_from_source_configs(
+            &mut removed_words_set,
+            &mut newly_added_words,
         );
+
+        // Update any_more_visible based on newly added words
+        any_more_visible = !newly_added_words.is_empty();
 
         // Hide any words that were in our existing list but aren't in the new one.
         for &(length, word_id) in &removed_words_set {
@@ -672,105 +712,109 @@ impl WordList {
             self.on_update = Some(on_update);
         }
 
+        console::log_1(&JsValue::from_str(&format!(
+            "WordList::replace_list complete. {} words in dictionary, {} more visible, {} less visible",
+            self.word_id_by_string.len(), any_more_visible, less_visible_words_set.len()
+        )));
+        
         (any_more_visible, less_visible_words_set)
     }
 
     fn load_words_from_source_configs(
         &mut self,
-        max_length: Option<usize>,
-        mut add_word: impl FnMut(&mut WordList, &RawWordListEntry, u16),
-        mut handle_disabled_personal_entry: impl FnMut(&mut WordList, &RawWordListEntry),
+        removed_words_set: &mut HashSet<GlobalWordId>,
+        newly_added_words: &mut Vec<GlobalWordId>,
     ) {
-        fn hash_str(str: &str) -> u64 {
-            let mut hasher = DefaultHasher::new();
-            str.hash(&mut hasher);
-            hasher.finish()
+        use wasm_bindgen::JsValue;
+        console::log_1(&JsValue::from_str("Starting load_words_from_source_configs..."));
+        
+        let mut source_states = HashMap::new();
+
+        for (source_index, source) in self.source_configs.iter().enumerate() {
+            let source_index = source_index as u16;
+            refresh_source_if_needed(source, source_index, &mut source_states);
         }
 
-        let source_configs = mem::take(&mut self.source_configs);
-        let mut source_states = mem::take(&mut self.source_states);
-        assert!(
-            source_configs.len() < 2usize.pow(16),
-            "Too many word list sources"
-        );
+        let mut total_added = 0;
+        
+        // Process each word from the sources
+        for source_state in source_states.values() {
+            console::log_1(&JsValue::from_str(&format!(
+                "Processing source state with {} entries",
+                source_state.entries.len()
+            )));
 
-        let mut seen_words: HashSet<u64> = HashSet::new();
+            for entry in &source_state.entries {
+                let length = entry.length;
+                
+                // Ensure we have enough buckets for this word length
+                while self.words.len() <= length {
+                    self.words.push(vec![]);
+                }
 
-        for (source_index, source) in source_configs.iter().enumerate() {
-            let is_source_enabled = source.enabled();
-            let is_personal_list = self
-                .personal_list_index
-                .map_or(false, |idx| idx == (source_index as u16));
-
-            refresh_source_if_needed(source, source_index as u16, &mut source_states);
-
-            // If the source is disabled, none of its words (or pending updates) should affect the
-            // actual wordlist. The exception is if this is the personal word list, in which case
-            // we still need to process it to populate the `personal_word_score` fields.
-            if !is_source_enabled && !is_personal_list {
-                continue;
-            }
-
-            let source_state = source_states
-                .get(&source.id())
-                .expect("source state must be defined after refreshing");
-
-            // If there are any pending updates, they take priority over the list items as stored.
-            let mut updated_words: Vec<RawWordListEntry> = vec![];
-            let superseded_words = if source_state.pending_updates.is_empty() {
-                None
-            } else {
-                let mut superseded_words = HashSet::new();
-                for (normalized, pending_update) in &source_state.pending_updates {
-                    superseded_words.insert(normalized.clone());
-
-                    if let PendingWordListUpdate::AddOrUpdate { canonical, score } = pending_update
-                    {
-                        updated_words.push(RawWordListEntry {
-                            length: normalized.chars().count(),
-                            normalized: normalized.clone(),
-                            canonical: canonical.clone(),
-                            score: *score,
-                        });
+                // Get or create word ID
+                let word_id = if let Some(&existing_id) = self.word_id_by_string.get(&entry.normalized) {
+                    // Update existing word if needed
+                    let word = &mut self.words[length][existing_id];
+                    word.score = word.score.max(entry.score);
+                    
+                    if self.personal_list_index.map_or(false, |idx| idx == source_state.source_index) {
+                        word.personal_word_score = Some(entry.score);
                     }
-                }
-                Some(superseded_words)
-            };
+                    
+                    existing_id
+                } else {
+                    let new_id = self.words[length].len();
+                    self.word_id_by_string.insert(entry.normalized.clone(), new_id);
+                    
+                    // Create new word
+                    let is_personal = self.personal_list_index
+                        .map_or(false, |idx| idx == source_state.source_index);
+                        
+                    // Calculate letter_score using LETTER_POINTS
+                    let letter_score = entry.normalized.chars()
+                        .map(|c| LETTER_POINTS.get(&c).copied().unwrap_or(3))
+                        .sum();
 
-            let mut process_word = |word: &RawWordListEntry| {
-                if let Some(max_length) = max_length {
-                    if word.length > max_length {
-                        return;
+                    // Create glyphs vector
+                    let glyphs: SmallVec<[GlyphId; MAX_SLOT_LENGTH]> = entry.normalized.chars()
+                        .map(|c| self.glyph_id_for_char(c))
+                        .collect();
+                        
+                    self.words[length].push(Word {
+                        normalized_string: entry.normalized.clone(),
+                        canonical_string: entry.canonical.clone(),
+                        glyphs,
+                        score: entry.score,
+                        letter_score,
+                        hidden: false,
+                        source_index: Some(source_state.source_index),
+                        personal_word_score: if is_personal { Some(entry.score) } else { None },
+                    });
+
+                    total_added += 1;
+                    if total_added % 10000 == 0 {
+                        console::log_1(&JsValue::from_str(&format!(
+                            "Added {} new words to dictionary",
+                            total_added
+                        )));
                     }
-                }
-                if !is_source_enabled && is_personal_list {
-                    handle_disabled_personal_entry(self, word);
-                    return;
-                }
-                let hash = hash_str(&word.normalized);
-                if seen_words.contains(&hash) {
-                    if is_personal_list {
-                        handle_disabled_personal_entry(self, word);
-                    }
-                    return;
-                }
-                add_word(self, word, source_state.source_index);
-                seen_words.insert(hash);
-            };
-            for word in &updated_words {
-                process_word(word);
-            }
-            for word in &source_state.entries {
-                if let Some(superseded_words) = superseded_words.as_ref() {
-                    if superseded_words.contains(&word.normalized) {
-                        continue;
-                    }
-                }
-                process_word(word);
+
+                    new_id
+                };
+
+                let global_id = (length, word_id);
+                removed_words_set.remove(&global_id);
+                newly_added_words.push(global_id);
             }
         }
 
-        self.source_configs = source_configs;
+        console::log_1(&JsValue::from_str(&format!(
+            "load_words_from_source_configs complete. Dictionary now contains {} total words ({} newly added)",
+            self.word_id_by_string.len(),
+            total_added
+        )));
+
         self.source_states = source_states;
     }
 

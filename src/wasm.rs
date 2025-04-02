@@ -6,7 +6,7 @@ use crate::arc_consistency::EliminationSet;
 use std::collections::HashSet;
 use unicode_normalization::UnicodeNormalization;
 use wasm_bindgen::prelude::*;
-
+use web_sys::console;
 const STWL_RAW: &str = include_str!("../resources/spreadthewordlist.dict");
 /// WASM-compatible function to fill a crossword grid
 #[wasm_bindgen]
@@ -94,6 +94,9 @@ pub fn fill_grid(
 fn find_fill_wasm(config: &GridConfig) -> Result<crate::backtracking_search::FillSuccess, crate::backtracking_search::FillFailure> {
     use crate::arc_consistency::EliminationSet;
     use crate::backtracking_search::*;
+    use wasm_bindgen::JsValue;
+    
+    console::log_1(&JsValue::from_str("Starting find_fill_wasm..."));
     
     // Create owned elimination sets
     let mut owned_elimination_sets = Some(EliminationSet::build_all(
@@ -102,6 +105,7 @@ fn find_fill_wasm(config: &GridConfig) -> Result<crate::backtracking_search::Fil
     ));
     let elimination_sets = owned_elimination_sets.as_mut().unwrap();
 
+    console::log_1(&JsValue::from_str("Created elimination sets"));
     // Create basic Slot structs for the grid
     let mut slots: Vec<Slot> = config
         .slot_configs
@@ -138,12 +142,17 @@ fn find_fill_wasm(config: &GridConfig) -> Result<crate::backtracking_search::Fil
         })
         .collect();
 
+    console::log_1(&JsValue::from_str(&format!(
+        "Created {} slot structs",
+        slots.len()
+    )));
     // Initialize crossing weights
     let mut crossing_weights: Vec<f32> = (0..config.crossing_count).map(|_| 1.0).collect();
 
     // Establish initial arc consistency without timing
     let slot_weights = calculate_slot_weights(config, &slots, &crossing_weights);
     
+    console::log_1(&JsValue::from_str("Calculated initial slot weights"));
     if !maintain_arc_consistency_wasm(
         config,
         &mut slots,
@@ -152,14 +161,25 @@ fn find_fill_wasm(config: &GridConfig) -> Result<crate::backtracking_search::Fil
         &ArcConsistencyMode::Initial,
         elimination_sets,
     ) {
+        console::log_1(&JsValue::from_str("Failed to maintain initial arc consistency"));
         return Err(FillFailure::HardFailure);
     }
 
+    console::log_1(&JsValue::from_str("Maintained initial arc consistency"));
     // Initial max_backtracks value
     let mut max_backtracks: usize = 500;
 
+    // Maximum number of retries before giving up
+    const MAX_RETRIES: u64 = 100000;
+
     // Try to fill the grid
-    for retry_num in 0.. {
+    for retry_num in 0..MAX_RETRIES {
+        if retry_num % 1000 == 0 {
+            console::log_1(&JsValue::from_str(&format!(
+                "Starting retry #{} with max_backtracks={}",
+                retry_num, max_backtracks
+            )));
+        }
         match find_fill_for_seed_wasm(
             config,
             &slots,
@@ -170,6 +190,10 @@ fn find_fill_wasm(config: &GridConfig) -> Result<crate::backtracking_search::Fil
         ) {
             Ok(mut result) => {
                 result.statistics.retries = retry_num as usize;
+                console::log_1(&JsValue::from_str(&format!(
+                    "Successfully found fill after {} retries",
+                    retry_num
+                )));
                 return Ok(result);
             }
             Err(FillFailure::ExceededBacktrackLimit(_)) => {
@@ -178,12 +202,21 @@ fn find_fill_wasm(config: &GridConfig) -> Result<crate::backtracking_search::Fil
                     .max((max_backtracks as f32 * RETRY_GROWTH_FACTOR) as usize);
             }
             other_error => {
+                console::log_1(&JsValue::from_str(&format!(
+                    "Failed with error: {:?}",
+                    other_error
+                )));
                 return other_error;
             }
         }
     }
 
-    unreachable!();
+    // If we've exhausted our retries, return HardFailure
+    console::log_1(&JsValue::from_str(&format!(
+        "Failed to find solution after {} retries",
+        MAX_RETRIES
+    )));
+    Err(FillFailure::HardFailure)
 }
 
 // WASM-compatible version of maintain_arc_consistency that doesn't use Instant
@@ -413,11 +446,13 @@ fn find_fill_for_seed_wasm(
             .take(RANDOM_WORD_WEIGHTS.len())
             .collect();
 
-        assert!(
-            !word_candidates.is_empty(),
-            "Unable to find option for slot {:?}",
-            slots[slot_id]
-        );
+        if word_candidates.is_empty() {
+            console::log_1(&JsValue::from_str(&format!(
+                "No valid candidates found for slot {:?}",
+                slots[slot_id]
+            )));
+            return Err(FillFailure::HardFailure);
+        }
 
         // Choose one candidate at random
         let (_, &word_id) =
