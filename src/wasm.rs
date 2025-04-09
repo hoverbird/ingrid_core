@@ -9,7 +9,11 @@ use wasm_bindgen::prelude::*;
 use web_sys::console;
 use std::sync::Mutex;
 use std::sync::LazyLock;
-
+#[wasm_bindgen(start)]
+pub fn initialize() {
+    // Set the panic hook for better error messages
+    crate::set_panic_hook();
+}
 const STWL_RAW: &str = include_str!("../resources/XwiWordList.txt");
 
 /// A struct to batch multiple strings into a single allocation
@@ -20,7 +24,6 @@ struct BatchedStrings {
     // Start and end indices of each string within the buffer
     spans: Vec<(usize, usize)>,
 }
-
 impl BatchedStrings {
 
     /// Create a new batch with an initial capacity
@@ -46,7 +49,6 @@ impl BatchedStrings {
         &self.buffer[start..end]
     }
 }
-
 /// A buffer pool for reusing string allocations
 struct StringBufferPool {
     // Pre-allocated buffers for different sizes
@@ -54,7 +56,6 @@ struct StringBufferPool {
     medium_buffers: Vec<String>, // For strings < 10KB
     large_buffers: Vec<String>,  // For strings < 100KB
 }
-
 impl StringBufferPool {
     /// Create a new buffer pool
     fn new() -> Self {
@@ -117,7 +118,6 @@ impl StringBufferPool {
         }
     }
 }
-
 /// Global string buffer pool
 static BUFFER_POOL: LazyLock<Mutex<StringBufferPool>> = LazyLock::new(|| {
     let mut pool = StringBufferPool::new();
@@ -132,6 +132,7 @@ pub async fn fill_grid(
     max_shared_substring: Option<usize>,
     word_list_source: Option<String>
 ) -> Result<String, JsError> {
+    console::log_1(&JsValue::from_str("Starting fill_grid function"));
     // console::time_with_label("fill_grid_total");
     // console::time_with_label("string_batching");
     
@@ -139,9 +140,11 @@ pub async fn fill_grid(
     let mut batched_strings = BatchedStrings::with_capacity(
         grid_content.len() + if word_list_source.is_none() { STWL_RAW.len() } else { 1024 * 1024 }
     );
+    console::log_1(&JsValue::from_str("Created batched strings container"));
     
     // Add grid content to the batch for normalization later
     let grid_content_idx = batched_strings.add(grid_content);
+    console::log_1(&JsValue::from_str("Added grid content to batch"));
     // console::time_end_with_label("string_batching");
     // console::log_1(&JsValue::from_str("⏱️ Time spent creating string batch"));
     
@@ -149,6 +152,7 @@ pub async fn fill_grid(
     // console::time_with_label("word_list_loading");
     let word_list_content = match word_list_source {
         Some(src) => {
+            console::log_1(&JsValue::from_str("Loading external word list"));
             if src.starts_with("http://") || src.starts_with("https://") {
                 use wasm_bindgen::JsCast;
                 let window = web_sys::window().unwrap_throw();
@@ -171,13 +175,17 @@ pub async fn fill_grid(
         }
         None => {
             // Use the built-in word list without extra allocation
+            console::log_1(&JsValue::from_str("Using built-in word list"));
             STWL_RAW.to_string()
         }
     };
     
+    console::log_1(&JsValue::from_str("Word list loaded"));
+    
     // Add the word list to our batched strings
     // console::time_with_label("word_list_batching");
     let word_list_idx = batched_strings.add(&word_list_content);
+    console::log_1(&JsValue::from_str("Added word list to batch"));
     // console::time_end_with_label("word_list_batching");
     // console::log_1(&JsValue::from_str("⏱️ Time spent batching word list"));
     // console::time_end_with_label("word_list_loading");
@@ -188,9 +196,14 @@ pub async fn fill_grid(
     let grid_content_for_normalization = batched_strings.get(grid_content_idx);
     let buffer_needed = grid_content_for_normalization.len() * 2; // Unicode normalization may expand
     
+    console::log_1(&JsValue::from_str("Getting buffer from pool"));
+    
     // Get a buffer from the pool
     let mut normalized_buffer = match BUFFER_POOL.lock() {
-        Ok(mut pool) => pool.get_buffer(buffer_needed),
+        Ok(mut pool) => {
+            console::log_1(&JsValue::from_str("Successfully acquired buffer pool lock"));
+            pool.get_buffer(buffer_needed)
+        },
         Err(_) => {
             // If the mutex is poisoned, create a new buffer directly
             console::warn_1(&JsValue::from_str("Buffer pool mutex is poisoned, creating new buffer"));
@@ -290,18 +303,28 @@ pub async fn fill_grid(
     }
 
     // console::time_with_label("template_string_processing");
+    // Before grid parsing
+    console::log_1(&JsValue::from_str("Parsing grid configuration"));
+    
     let grid_config =
         generate_grid_config_from_template_string(word_list, &raw_grid_content, min_score.into());
+    
+    console::log_1(&JsValue::from_str("Grid configuration parsed successfully"));
     // console::time_end_with_label("template_string_processing");
     // console::log_1(&JsValue::from_str("⏱️ Time spent processing template string"));
+    console::log_1(&JsValue::from_str("Search initialized, starting solve"));
+
     let result = find_fill_wasm(&grid_config.to_config_ref())
         .map_err(|_| {
             // Return buffer to the pool before returning error
             if let Ok(mut pool) = BUFFER_POOL.lock() {
                 pool.return_buffer(normalized_buffer.clone());
             }
+            console::log_1(&JsValue::from_str("No solution found"));
             JsError::new("Unfillable grid")
         })?;
+    
+    console::log_1(&JsValue::from_str("Solution found"));
 
     // Return the filled grid as a string
     // console::time_with_label("grid_rendering");

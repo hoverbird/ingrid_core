@@ -8,6 +8,21 @@
 #![allow(clippy::missing_errors_doc)]
 #![allow(clippy::missing_panics_doc)]
 #![allow(clippy::module_name_repetitions)]
+#[cfg(target_arch = "wasm32")]
+use wee_alloc::WeeAlloc;
+
+#[cfg(target_arch = "wasm32")]
+#[global_allocator]
+static ALLOC: WeeAlloc = WeeAlloc::INIT;
+
+#[cfg(target_arch = "wasm32")]
+#[inline]
+pub fn set_panic_hook() {
+    // When the `console_error_panic_hook` feature is enabled, we can call the
+    // `set_panic_hook` function to get better error messages if we ever panic.
+    #[cfg(feature = "console_error_panic_hook")]
+    console_error_panic_hook::set_once();
+}
 
 pub mod arc_consistency;
 pub mod backtracking_search;
