@@ -67,5 +67,5 @@ inherits = "release"
 opt-level = 'z'  # Optimize for size
 lto = true
 codegen-units = 1
-panic = 'abort'
+panic = 'unwind' # Allow panics to be caught by JS
 strip = true  # Remove debug symbols
