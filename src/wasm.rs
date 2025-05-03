@@ -49,81 +49,7 @@ impl BatchedStrings {
         &self.buffer[start..end]
     }
 }
-/// A buffer pool for reusing string allocations
-struct StringBufferPool {
-    // Pre-allocated buffers for different sizes
-    small_buffers: Vec<String>,  // For strings < 1KB
-    medium_buffers: Vec<String>, // For strings < 10KB
-    large_buffers: Vec<String>,  // For strings < 100KB
-}
-impl StringBufferPool {
-    /// Create a new buffer pool
-    fn new() -> Self {
-        Self {
-            small_buffers: Vec::new(),
-            medium_buffers: Vec::new(),
-            large_buffers: Vec::new(),
-        }
-    }
-
-    /// Initialize the pool with some pre-allocated buffers
-    fn initialize(&mut self) {
-        for _ in 0..10 {
-            let mut buf = String::with_capacity(1024);
-            buf.clear();
-            self.small_buffers.push(buf);
-        }
-        
-        for _ in 0..5 {
-            let mut buf = String::with_capacity(10 * 1024);
-            buf.clear();
-            self.medium_buffers.push(buf);
-        }
-        
-        for _ in 0..2 {
-            let mut buf = String::with_capacity(100 * 1024);
-            buf.clear();
-            self.large_buffers.push(buf);
-        }
-    }
-
-    /// Get a buffer of appropriate size
-    fn get_buffer(&mut self, min_capacity: usize) -> String {
-        if min_capacity < 1024 {
-            self.small_buffers.pop().unwrap_or_else(|| String::with_capacity(min_capacity))
-        } else if min_capacity < 10 * 1024 {
-            self.medium_buffers.pop().unwrap_or_else(|| String::with_capacity(min_capacity))
-        } else {
-            self.large_buffers.pop().unwrap_or_else(|| String::with_capacity(min_capacity))
-        }
-    }
-
-    /// Return a buffer to the pool
-    fn return_buffer(&mut self, mut buffer: String) {
-        buffer.clear();
-        let capacity = buffer.capacity();
-        
-        if capacity < 1024 {
-            if self.small_buffers.len() < 20 {
-                self.small_buffers.push(buffer);
-            }
-        } else if capacity < 10 * 1024 {
-            if self.medium_buffers.len() < 10 {
-                self.medium_buffers.push(buffer);
-            }
-        } else if capacity < 100 * 1024 {
-            if self.large_buffers.len() < 5 {
-                self.large_buffers.push(buffer);
-            }
-        }
-    }
-}
-/// Global string buffer pool
-static BUFFER_POOL: LazyLock<Mutex<StringBufferPool>> = LazyLock::new(|| {
-    let mut pool = StringBufferPool::new();
-    pool.initialize();
-    Mutex::new(pool)
-});
+// Buffer pool removed for debugging WASM unreachable error
 /// WASM-compatible function to fill a crossword grid
 #[wasm_bindgen]
 pub async fn fill_grid(
@@ -196,22 +122,8 @@ pub async fn fill_grid(
     let grid_content_for_normalization = batched_strings.get(grid_content_idx);
     let buffer_needed = grid_content_for_normalization.len() * 2; // Unicode normalization may expand
     
-    console::log_1(&JsValue::from_str("Getting buffer from pool"));
-    
-    // Get a buffer from the pool
-    let mut normalized_buffer = match BUFFER_POOL.lock() {
-        Ok(mut pool) => {
-            console::log_1(&JsValue::from_str("Successfully acquired buffer pool lock"));
-            pool.get_buffer(buffer_needed)
-        },
-        Err(_) => {
-            // If the mutex is poisoned, create a new buffer directly
-            console::warn_1(&JsValue::from_str("Buffer pool mutex is poisoned, creating new buffer"));
-            String::with_capacity(buffer_needed)
-        }
-    };
-    normalized_buffer.clear();
-    
+    // Buffer pool removed - creating buffer directly
+    let mut normalized_buffer = String::with_capacity(buffer_needed);
     // Normalize grid content using the pre-allocated buffer
     let raw_grid_content = grid_content_for_normalization
         .trim()
@@ -276,29 +188,20 @@ pub async fn fill_grid(
     #[allow(clippy::comparison_chain)]
     if let Some(errors) = word_list.get_source_errors().get("0") {
         if errors.len() == 1 {
-            // Return buffer to the pool before returning error
-            if let Ok(mut pool) = BUFFER_POOL.lock() {
-                pool.return_buffer(normalized_buffer);
-            }
+            // Buffer pool removed
             return Err(JsError::new(&errors[0].to_string()));
         } else if errors.len() > 1 {
             let mut full_error = String::new();
             for error in errors {
                 full_error.push_str(&format!("\n- {error}"));
             }
-            // Return buffer to the pool before returning error
-            if let Ok(mut pool) = BUFFER_POOL.lock() {
-                pool.return_buffer(normalized_buffer);
-            }
+            // Buffer pool removed
             return Err(JsError::new(&full_error));
         }
     }
 
     if word_list.word_id_by_string.is_empty() {
-        // Return buffer to the pool before returning error
-        if let Ok(mut pool) = BUFFER_POOL.lock() {
-            pool.return_buffer(normalized_buffer);
-        }
+        // Buffer pool removed
         return Err(JsError::new("Word list is empty"));
     }
 
@@ -316,10 +219,7 @@ pub async fn fill_grid(
 
     let result = find_fill_wasm(&grid_config.to_config_ref())
         .map_err(|_| {
-            // Return buffer to the pool before returning error
-            if let Ok(mut pool) = BUFFER_POOL.lock() {
-                pool.return_buffer(normalized_buffer.clone());
-            }
+            // Buffer pool removed
             console::log_1(&JsValue::from_str("No solution found"));
             JsError::new("Unfillable grid")
         })?;
@@ -335,17 +235,7 @@ pub async fn fill_grid(
     // console::time_end_with_label("fill_grid_total");
     // console::log_1(&JsValue::from_str("⏱️ Total time spent in WASM boundary crossing"));
     
-    // Clean up buffer pool before returning
-    // console::time_with_label("buffer_pool_cleanup");
-    // Return the normalized buffer to the pool
-    if let Ok(mut pool) = BUFFER_POOL.lock() {
-        pool.return_buffer(normalized_buffer);
-    } else {
-        console::warn_1(&JsValue::from_str("Failed to return buffer to pool - mutex poisoned"));
-    }
-    // console::time_end_with_label("buffer_pool_cleanup");
-    // console::log_1(&JsValue::from_str("⏱️ Time spent cleaning up buffer pool"));
-    
+    // Buffer pool removed
     Ok(rendered_grid)
 }
 
