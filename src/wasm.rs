@@ -6,7 +6,7 @@ use crate::arc_consistency::EliminationSet;
 use std::collections::HashSet;
 use unicode_normalization::UnicodeNormalization;
 use wasm_bindgen::prelude::*;
-use web_sys::console;
+// use web_sys::console;
 use std::sync::Mutex;
 use std::sync::LazyLock;
 #[wasm_bindgen(start)]
@@ -58,7 +58,7 @@ pub async fn fill_grid(
     max_shared_substring: Option<usize>,
     word_list_source: Option<String>
 ) -> Result<String, JsError> {
-    console::log_1(&JsValue::from_str("Starting fill_grid function"));
+    // console::log_1(&JsValue::from_str("Starting fill_grid function"));
     // console::time_with_label("fill_grid_total");
     // console::time_with_label("string_batching");
     
@@ -66,11 +66,11 @@ pub async fn fill_grid(
     let mut batched_strings = BatchedStrings::with_capacity(
         grid_content.len() + if word_list_source.is_none() { STWL_RAW.len() } else { 1024 * 1024 }
     );
-    console::log_1(&JsValue::from_str("Created batched strings container"));
-    
+    // console::log_1(&JsValue::from_str("Created batched strings container"));
+
     // Add grid content to the batch for normalization later
     let grid_content_idx = batched_strings.add(grid_content);
-    console::log_1(&JsValue::from_str("Added grid content to batch"));
+    // console::log_1(&JsValue::from_str("Added grid content to batch"));
     // console::time_end_with_label("string_batching");
     // console::log_1(&JsValue::from_str("⏱️ Time spent creating string batch"));
     
@@ -78,7 +78,7 @@ pub async fn fill_grid(
     // console::time_with_label("word_list_loading");
     let word_list_content = match word_list_source {
         Some(src) => {
-            console::log_1(&JsValue::from_str("Loading external word list"));
+            // console::log_1(&JsValue::from_str("Loading external word list"));
             if src.starts_with("http://") || src.starts_with("https://") {
                 use wasm_bindgen::JsCast;
                 let window = web_sys::window().unwrap_throw();
@@ -101,17 +101,17 @@ pub async fn fill_grid(
         }
         None => {
             // Use the built-in word list without extra allocation
-            console::log_1(&JsValue::from_str("Using built-in word list"));
+            // console::log_1(&JsValue::from_str("Using built-in word list"));
             STWL_RAW.to_string()
         }
     };
-    
-    console::log_1(&JsValue::from_str("Word list loaded"));
-    
+
+    // console::log_1(&JsValue::from_str("Word list loaded"));
+
     // Add the word list to our batched strings
     // console::time_with_label("word_list_batching");
     let word_list_idx = batched_strings.add(&word_list_content);
-    console::log_1(&JsValue::from_str("Added word list to batch"));
+    // console::log_1(&JsValue::from_str("Added word list to batch"));
     // console::time_end_with_label("word_list_batching");
     // console::log_1(&JsValue::from_str("⏱️ Time spent batching word list"));
     // console::time_end_with_label("word_list_loading");
@@ -207,24 +207,24 @@ pub async fn fill_grid(
 
     // console::time_with_label("template_string_processing");
     // Before grid parsing
-    console::log_1(&JsValue::from_str("Parsing grid configuration"));
-    
+    // console::log_1(&JsValue::from_str("Parsing grid configuration"));
+
     let grid_config =
         generate_grid_config_from_template_string(word_list, &raw_grid_content, min_score.into());
-    
-    console::log_1(&JsValue::from_str("Grid configuration parsed successfully"));
+
+    // console::log_1(&JsValue::from_str("Grid configuration parsed successfully"));
     // console::time_end_with_label("template_string_processing");
     // console::log_1(&JsValue::from_str("⏱️ Time spent processing template string"));
-    console::log_1(&JsValue::from_str("Search initialized, starting solve"));
+    // console::log_1(&JsValue::from_str("Search initialized, starting solve"));
 
     let result = find_fill_wasm(&grid_config.to_config_ref())
         .map_err(|_| {
             // Buffer pool removed
-            console::log_1(&JsValue::from_str("No solution found"));
+            // console::log_1(&JsValue::from_str("No solution found"));
             JsError::new("Unfillable grid")
         })?;
-    
-    console::log_1(&JsValue::from_str("Solution found"));
+
+    // console::log_1(&JsValue::from_str("Solution found"));
 
     // Return the filled grid as a string
     // console::time_with_label("grid_rendering");
@@ -565,11 +565,11 @@ fn find_fill_for_seed_wasm(
             .collect();
 
         if word_candidates.is_empty() {
-            use web_sys::console;
-            console::log_1(&JsValue::from_str(&format!(
-                "No valid candidates found for slot {:?}",
-                slots[slot_id]
-            )));
+            // use web_sys::console; // Already commented out at top level
+            // console::log_1(&JsValue::from_str(&format!(
+            //     "No valid candidates found for slot {:?}",
+            //     slots[slot_id]
+            // )));
             return Err(FillFailure::HardFailure);
         }
 
