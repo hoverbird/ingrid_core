@@ -582,13 +582,27 @@ pub fn find_fill_for_seed(
 
             // We need to build a `choices` array that includes both choices we made explicitly
             // and ones that were made implicitly by maintaining arc consistency.
-            let choices = slots
-                .into_iter()
-                .map(|slot| {
-                    slot.get_choice(config)
-                        .expect("Failed to identify single choice for slot")
-                })
-                .collect();
+            // Ensure every slot has exactly one choice.
+            let mut choices = Vec::with_capacity(slots.len());
+            for slot in slots.into_iter() {
+                match slot.get_choice(config) {
+                    Some(choice) => choices.push(choice),
+                    None => {
+                        // This indicates an inconsistent state: the algorithm thinks it's done,
+                        // but not all slots have a single determined word.
+                        eprintln!(
+                            "Error: Grid fill completed but slot {} has no single choice.",
+                            slot.id
+                        );
+                        // Log relevant state details if possible
+                        eprintln!("Slot details: {:?}", slot);
+                        // Consider logging config, last_slot_id, etc. if helpful
+
+                        // Return a hard failure as this state shouldn't be reachable
+                        return Err(FillFailure::HardFailure);
+                    }
+                }
+            }
 
             return Ok(FillSuccess {
                 statistics,
@@ -812,7 +826,9 @@ pub fn find_fill(
         }
     }
 
-    unreachable!();
+    // If we've exhausted all retries without finding a solution or hitting another error,
+    // return a hard failure.
+    Err(FillFailure::HardFailure)
 }
 
 #[cfg(test)]

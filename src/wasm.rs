@@ -7,8 +7,6 @@ use std::collections::HashSet;
 use unicode_normalization::UnicodeNormalization;
 use wasm_bindgen::prelude::*;
 // use web_sys::console;
-use std::sync::Mutex;
-use std::sync::LazyLock;
 #[wasm_bindgen(start)]
 pub fn initialize() {
     // Set the panic hook for better error messages
@@ -123,8 +121,8 @@ pub async fn fill_grid(
     let buffer_needed = grid_content_for_normalization.len() * 2; // Unicode normalization may expand
     
     // Buffer pool removed - creating buffer directly
-    let mut normalized_buffer = String::with_capacity(buffer_needed);
     // Normalize grid content using the pre-allocated buffer
+    let _normalized_buffer = String::with_capacity(buffer_needed); // Renamed and removed mut as it's unused
     let raw_grid_content = grid_content_for_normalization
         .trim()
         .nfkd()
@@ -266,26 +264,33 @@ fn find_fill_wasm(config: &GridConfig) -> Result<crate::backtracking_search::Fil
                 .complete_fill(config.fill, config.width)
                 .is_some();
 
-            Slot {
+            let fixed_word_id = if is_fixed {
+                // Replace assert_eq! with a check that returns an Err
+                if config.slot_options[slot_config.id].len() != 1 {
+                    return Err(FillFailure::HardFailure); // Return Err if inconsistent
+                }
+                Some(config.slot_options[slot_config.id][0])
+            } else {
+                None
+            };
+
+            // Wrap Slot creation in Ok
+            Ok(Slot {
                 id: slot_config.id,
                 length: slot_config.length,
                 eliminations: vec![None; config.word_list.words[slot_config.length].len()],
                 remaining_option_count: config.slot_options[slot_config.id].len(),
-                fixed_word_id: if is_fixed {
-                    assert_eq!(config.slot_options[slot_config.id].len(), 1);
-                    Some(config.slot_options[slot_config.id][0])
-                } else {
-                    None
-                },
+                fixed_word_id, // Use the result of the check
                 fixed_glyph_counts_by_cell: if is_fixed {
                     Some(glyph_counts_by_cell.clone())
                 } else {
                     None
                 },
                 glyph_counts_by_cell,
-            }
+            })
         })
-        .collect();
+        // Collect into a Result and propagate error with ?
+        .collect::<Result<Vec<Slot>, FillFailure>>()?;
 
     // Initialize crossing weights
     let mut crossing_weights: Vec<f32> = (0..config.crossing_count).map(|_| 1.0).collect();
@@ -533,18 +538,22 @@ fn find_fill_for_seed_wasm(
             &mut statistics,
         ) else {
             // If no more slots to fill, we're done
-            // Build choices array with explicit and implicit choices
-            let choices = slots
-                .into_iter()
-                .map(|slot| {
-                    slot.get_choice(config)
-                        .expect("Failed to identify single choice for slot")
-                })
-                .collect();
+            // Build final choices array, checking each slot
+            let mut final_choices = Vec::with_capacity(slots.len());
+            for slot in slots {
+                match slot.get_choice(config) {
+                    Some(choice) => final_choices.push(choice),
+                    None => {
+                        // If any slot doesn't have a single choice, it's a hard failure
+                        // This prevents the panic from the previous .expect()
+                        return Err(FillFailure::HardFailure);
+                    }
+                }
+            }
 
             return Ok(FillSuccess {
                 statistics,
-                choices,
+                choices: final_choices,
             });
         };
 
