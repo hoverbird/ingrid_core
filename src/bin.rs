@@ -35,7 +35,7 @@ struct Args {
     time: bool,
 }
 
-struct Error(String);
+pub struct Error(String);
 
 impl Debug for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
@@ -97,7 +97,7 @@ pub fn main() -> Result<(), Error> {
             None => WordListSourceConfig::FileContents {
                 id: "0".into(),
                 enabled: true,
-                contents: STWL_RAW,
+                contents: STWL_RAW.to_string(),
             },
         }],
         None,
