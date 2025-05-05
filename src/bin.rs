@@ -3,6 +3,7 @@ use clap::Parser;
 use ingrid_core::backtracking_search::find_fill;
 use ingrid_core::grid_config::{generate_grid_config_from_template_string, render_grid};
 use ingrid_core::word_list::{WordList, WordListSourceConfig};
+use std::borrow::Cow; // Added import for Cow
 use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 use std::fs;
@@ -97,7 +98,7 @@ pub fn main() -> Result<(), Error> {
             None => WordListSourceConfig::FileContents {
                 id: "0".into(),
                 enabled: true,
-                contents: STWL_RAW,
+                contents: Cow::Borrowed(STWL_RAW), // Use Cow::Borrowed for static str
             },
         }],
         None,

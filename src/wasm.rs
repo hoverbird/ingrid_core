@@ -250,7 +250,7 @@ pub async fn fill_grid(
         vec![WordListSourceConfig::FileContents {
             id: "0".into(),
             enabled: true,
-            contents: word_list_content_ref.to_string(),
+            contents: word_list_content_ref.to_string().into(), // Use .into() to convert String to Cow::Owned
         }],
         None,
         None,
