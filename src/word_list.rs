@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use smallvec::SmallVec;
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::fmt::Debug;
@@ -115,7 +116,7 @@ pub enum WordListSourceConfig {
     FileContents {
         id: String,
         enabled: bool,
-        contents: String,
+        contents: Cow<'static, str>, // Changed from String to Cow
     },
 }
 
