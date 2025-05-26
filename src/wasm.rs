@@ -7,12 +7,11 @@ use std::collections::HashSet;
 use unicode_normalization::UnicodeNormalization;
 use wasm_bindgen::prelude::*;
 // use web_sys::console;
-use std::sync::Mutex;
-use std::sync::LazyLock;
 #[wasm_bindgen(start)]
-pub fn initialize() {
+pub fn initialize() -> Result<(), JsError> {
     // Set the panic hook for better error messages
     crate::set_panic_hook();
+    Ok(())
 }
 const STWL_RAW: &str = include_str!("../resources/XwiWordList.txt");
 
@@ -100,10 +99,8 @@ pub async fn fill_grid(
 
     // Get a pre-allocated buffer for string normalization from the pool
     let grid_content_for_normalization = batched_strings.get(grid_content_idx);
-    let buffer_needed = grid_content_for_normalization.len() * 2; // Unicode normalization may expand
     
     // Buffer pool removed - creating buffer directly
-    let mut normalized_buffer = String::with_capacity(buffer_needed);
     // Normalize grid content using the pre-allocated buffer
     let raw_grid_content = grid_content_for_normalization
         .trim()
