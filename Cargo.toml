@@ -46,26 +46,3 @@ crate-type = ["cdylib", "rlib"]
 [[bin]]
 name = "ingrid_core_bin"
 path = "src/bin.rs"
-
-[profile.release]
-codegen-units = 1
-lto = true
-opt-level = 3
-
-[profile.dev]
-codegen-units = 1
-lto = true
-opt-level = 3
-
-[profile.test]
-codegen-units = 1
-lto = true
-opt-level = 3
-
-[profile.release-wasm]
-inherits = "release"
-opt-level = 'z'  # Optimize for size
-lto = true
-codegen-units = 1
-panic = 'unwind' # Allow panics to be caught by JS
-strip = true  # Remove debug symbols
