@@ -1,6 +1,6 @@
 import * as ingridCore from "../src/ingrid-wasm/ingrid_core.js";
-import { assertEquals, assert} from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { parseGridString } from "../src/shared/util.ts";
+import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { parseGridString } from "../src/shared/gridUtils.ts";
 
 // Removed unused import as Deno.readTextFile is used instead
 // Load the word list from disk
