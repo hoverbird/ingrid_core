@@ -1,4 +1,4 @@
-import * as ingridCore from "../src/ingrid-wasm/ingrid_core.js";
+import * as ingridCore from "../lib/ingrid_core.js";
 import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { parseGridString } from "../src/shared/gridUtils.ts";
 
@@ -23,7 +23,7 @@ const gridContent =
 async function testGridFill() {
   try {
     console.log("Initializing WebAssembly module...");
-    await ingridCore.default();
+    // await ingridCore.default();
     
     console.log("Creating grid content...");
     
@@ -52,7 +52,7 @@ async function testRuntimeComparison() {
     // Measure WebAssembly initialization time
     const startWasmInit = Date.now();
     console.log("Initializing WebAssembly module...");
-    await ingridCore.default();
+    // await ingridCore.default();
     const wasmInitTime = Date.now() - startWasmInit;
     console.log("WASM initialization time:", wasmInitTime, "ms");
     
