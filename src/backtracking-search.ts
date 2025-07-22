@@ -1,8 +1,51 @@
 import type { WordId } from "./types.ts";
 import type { GridConfig, SlotId } from "./grid-config.ts";
+import { weightedRandom } from "./util.ts";
 import type { GlyphCountsByCell } from "./util.ts";
 import { buildGlyphCountsByCell } from "./util.ts";
 import { ArcConsistencyAdapter, EliminationSet } from "./arc-consistency.ts";
+
+/**
+ * A class tracking stats about the filling process.
+ */
+export class Statistics {
+  /** The number of states explored. */
+  public states = 0;
+  /** The number of times the algorithm backtracked. */
+  public backtracks = 0;
+  /** The number of times the algorithm used adaptive branching. */
+  public restrictedBranchings = 0;
+  /** The number of times the algorithm retried with a new random seed. */
+  public retries = 0;
+  /** The total time taken to find a fill. */
+  public totalTime = 0;
+  /** The time taken for the successful try. */
+  public tryTime = 0;
+  /** The time taken for the initial arc consistency check. */
+  public initialArcConsistencyTime = 0;
+  /** The time taken for arc consistency checks after a choice. */
+  public choiceArcConsistencyTime = 0;
+  /** The time taken for arc consistency checks after an elimination. */
+  public eliminationArcConsistencyTime = 0;
+}
+
+import type { Choice } from "./grid-config.ts";
+
+/**
+ * A struct representing the results of a fill operation.
+ */
+export interface FillSuccess {
+  type: "Success";
+  statistics: Statistics;
+  choices: Choice[];
+}
+
+export type FillFailure =
+  | { type: "HardFailure" }
+  | { type: "Timeout" }
+  | { type: "Abort" }
+  | { type: "ExceededBacktrackLimit"; limit: number };
+
 
 /**
  * If the previously-attempted slot is within this distance of the "best" (lowest-priority-value)
@@ -67,23 +110,48 @@ export class Slot {
     wordId: WordId,
     blamedSlotId: SlotId | null,
   ) {
-    this.eliminations[wordId] = blamedSlotId;
-    this.remainingOptionCount--;
+    if (this.eliminations[wordId] === undefined) {
+      this.eliminations[wordId] = blamedSlotId;
+      this.remainingOptionCount--;
 
-    const word = config.wordList.words[this.length][wordId];
-    for (const [cellIndex, glyph] of word.glyphs.entries()) {
-      this.glyphCountsByCell[cellIndex][glyph]--;
+      const word = config.wordList.words[this.length][wordId];
+      for (const [cellIndex, glyph] of word.glyphs.entries()) {
+        this.glyphCountsByCell[cellIndex][glyph]--;
+      }
     }
   }
 
   public removeElimination(config: GridConfig, wordId: WordId) {
-    this.eliminations[wordId] = undefined;
-    this.remainingOptionCount++;
+    if (this.eliminations[wordId] !== undefined) {
+      this.eliminations[wordId] = undefined;
+      this.remainingOptionCount++;
 
-    const word = config.wordList.words[this.length][wordId];
-    for (const [cellIndex, glyph] of word.glyphs.entries()) {
-      this.glyphCountsByCell[cellIndex][glyph]++;
+      const word = config.wordList.words[this.length][wordId];
+      for (const [cellIndex, glyph] of word.glyphs.entries()) {
+        this.glyphCountsByCell[cellIndex][glyph]++;
+      }
     }
+  }
+  
+  public clearEliminations(config: GridConfig, slotId: SlotId) {
+    for (let i = 0; i < this.eliminations.length; i++) {
+      if (this.eliminations[i] === slotId) {
+        this.removeElimination(config, i);
+      }
+    }
+  }
+              
+  public getChoice(config: GridConfig): Choice | undefined {
+    if (this.fixedWordId !== undefined) {
+      return { slotId: this.id, wordId: this.fixedWordId };
+    }
+    if (this.remainingOptionCount === 1) {
+      const wordId = config.slotOptions[this.id].find((wordId) => this.eliminations[wordId] === undefined);
+      if (wordId !== undefined) {
+        return { slotId: this.id, wordId };
+      }
+    }
+    return undefined;
   }
 
   public chooseWord(config: GridConfig, wordId: WordId) {
@@ -100,46 +168,8 @@ export class Slot {
     this.fixedGlyphCountsByCell = undefined;
   }
 }
-import type { Choice } from "./grid-config.ts";
 
-/**
- * A class tracking stats about the filling process.
- */
-export class Statistics {
-  /** The number of states explored. */
-  public states = 0;
-  /** The number of times the algorithm backtracked. */
-  public backtracks = 0;
-  /** The number of times the algorithm used adaptive branching. */
-  public restrictedBranchings = 0;
-  /** The number of times the algorithm retried with a new random seed. */
-  public retries = 0;
-  /** The total time taken to find a fill. */
-  public totalTime = 0;
-  /** The time taken for the successful try. */
-  public tryTime = 0;
-  /** The time taken for the initial arc consistency check. */
-  public initialArcConsistencyTime = 0;
-  /** The time taken for arc consistency checks after a choice. */
-  public choiceArcConsistencyTime = 0;
-  /** The time taken for arc consistency checks after an elimination. */
-  public eliminationArcConsistencyTime = 0;
-}
 
-/**
- * A struct representing the results of a fill operation.
- */
-export interface FillSuccess {
-  type: "Success";
-  statistics: Statistics;
-  choices: Choice[];
-}
-
-export type FillFailure =
-  | { type: "HardFailure" }
-  | { type: "Timeout" }
-  | { type: "Abort" }
-  | { type: "ExceededBacktrackLimit"; limit: number };
 /**
  * Search for a valid fill for the given grid.
  */
@@ -157,7 +187,7 @@ export async function findFill(
       config.slotOptions[slotConfig.id],
     );
 
-    const isFixed = slotConfig.getFill(config.fill, config.width).every((g) => g !== undefined);
+    const _isFixed = slotConfig.getFill(config.fill, config.width).every((g) => g !== undefined);
 
     return new Slot(
       slotConfig.id,
@@ -272,8 +302,8 @@ async function findFillForSeed(
       return { type: "HardFailure" };
     }
 
-    // TODO: Implement weighted random choice
-    const { wordId } = wordCandidates[0];
+    const randomIndex = weightedRandom(RANDOM_WORD_WEIGHTS.slice(0, wordCandidates.length));
+    const { wordId } = wordCandidates[randomIndex];
 
     const choice: Choice = { slotId, wordId };
 
@@ -367,8 +397,8 @@ function chooseNextSlot(
     }
   }
 
-  // TODO: Implement weighted random choice
-  return sortedSlotIds[0];
+  const randomIndex = weightedRandom(RANDOM_SLOT_WEIGHTS.slice(0, sortedSlotIds.length));
+  return sortedSlotIds[randomIndex];
 }
 import { establishArcConsistency } from "./arc-consistency.ts";
 
