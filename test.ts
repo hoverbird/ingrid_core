@@ -19,7 +19,7 @@ const gridContent =
 async function testGridFill() {
     try {
         console.log("Initializing WebAssembly module...");
-        await ingridCore.default();
+        // await ingridCore.default();
         
         console.log("Creating grid content...");
 
@@ -40,7 +40,7 @@ async function testGridFill() {
 async function testGridFillWithWordList() {
     try {
         console.log("Initializing WebAssembly module...");
-        await ingridCore.default();
+        // await ingridCore.default();
         
         console.log("Creating grid content...");
         
@@ -65,7 +65,7 @@ async function testRuntimeComparison() {
         // Measure WebAssembly initialization time
         const startWasmInit = Date.now();
         console.log("Initializing WebAssembly module...");
-        await ingridCore.default();
+        // await ingridCore.default();
         const wasmInitTime = Date.now() - startWasmInit;
         console.log("WASM initialization time:", wasmInitTime, "ms");
             
