@@ -1,44 +1,27 @@
 import { assertEquals } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { generateSlotsFromTemplateString, generateSlotConfigs, generateSlotOptions } from "../src/grid-config.ts";
+import { getGridTemplate } from "../src/grid-templates.ts";
 import { WordList } from "../src/word-list.ts";
 
-const exampleGrid = `
-....#.....#....
-....#.....#....
-...............
-......##.......
-###.....#......
-............###
-.....#.....#...
-....#.....#....
-...#.....#.....
-###cremebrulees
-......#.....###
-.......##......
-...............
-....#.....#....
-....#.....#....
-`;
-
 Deno.test("generateSlotsFromTemplateString", () => {
-  const slotSpecs = generateSlotsFromTemplateString(exampleGrid);
-  assertEquals(slotSpecs.length, 60);
+  const slotSpecs = generateSlotsFromTemplateString(getGridTemplate("Mini1").gridString);
+  assertEquals(slotSpecs.length, 10);
 });
 
 Deno.test("generateSlotConfigs", () => {
-  const slotSpecs = generateSlotsFromTemplateString(exampleGrid);
+  const slotSpecs = generateSlotsFromTemplateString(getGridTemplate("Mini2").gridString);
   const { slotConfigs, crossingCount } = generateSlotConfigs(slotSpecs);
 
-  assertEquals(slotConfigs.length, 60);
-  assertEquals(crossingCount > 100, true);
+  assertEquals(slotConfigs.length, 8);
+  assertEquals(crossingCount, 12);
 
   const firstAcross = slotConfigs[0];
   assertEquals(firstAcross.direction, "across");
-  assertEquals(firstAcross.startCell, [0, 0]);
+  assertEquals(firstAcross.startCell, [1, 0]);
 
-  const firstDown = slotConfigs[30];
+  const firstDown = slotConfigs[4];
   assertEquals(firstDown.direction, "down");
-  assertEquals(firstDown.startCell, [0, 0]);
+  assertEquals(firstDown.startCell, [0, 1]);
 
   assertEquals(firstAcross.crossings[0]!.otherSlotId, firstDown.id);
   assertEquals(firstDown.crossings[0]!.otherSlotId, firstAcross.id);

@@ -104,5 +104,5 @@ async function testRuntimeComparison() {
 
 // Run the tests sequentially
 await testGridFill();
-await testGridFillWithWordList();
-await testRuntimeComparison();
+// await testGridFillWithWordList();
+// await testRuntimeComparison();

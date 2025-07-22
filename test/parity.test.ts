@@ -1,10 +1,11 @@
 import { assertEquals } from "https://deno.land/std@0.140.0/testing/asserts.ts";
 import { WordList } from "../src/word-list.ts";
 import { generateGridConfigFromTemplateString, renderGrid } from "../src/grid-config.ts";
+import { getGridTemplate } from "../src/grid-templates.ts";
 import { findFill } from "../src/backtracking-search.ts";
 
 Deno.test("Parity test with example-grid.txt", async () => {
-  const gridTemplate = await Deno.readTextFile("test/fixtures/example-grid.txt");
+  const gridTemplate = getGridTemplate("Parity1").gridString;
   const wordList = new WordList([]);
   await wordList.replaceList([
     {
