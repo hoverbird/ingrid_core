@@ -96,13 +96,21 @@ import { WordList } from "./word-list.ts";
  * A class that holds all of the information needed as input to a crossword filling operation.
  */
 export class GridConfig {
+  /** The word list used to fill the grid. */
   public wordList: WordList;
+  /** A flat array of letters filled into the grid. */
   public fill: (GlyphId | undefined)[];
+  /** Config representing all of the slots in the grid. */
   public slotConfigs: SlotConfig[];
+  /** An array of available words for each slot. */
   public slotOptions: WordId[][];
+  /** The width of the grid. */
   public width: number;
+  /** The height of the grid. */
   public height: number;
+  /** The number of distinct crossings in the grid. */
   public crossingCount: number;
+  /** A flag to signal that the fill operation should be canceled. */
   public abort = false;
 
   constructor(

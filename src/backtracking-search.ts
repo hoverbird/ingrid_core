@@ -106,14 +106,23 @@ import type { Choice } from "./grid-config.ts";
  * A class tracking stats about the filling process.
  */
 export class Statistics {
+  /** The number of states explored. */
   public states = 0;
+  /** The number of times the algorithm backtracked. */
   public backtracks = 0;
+  /** The number of times the algorithm used adaptive branching. */
   public restrictedBranchings = 0;
+  /** The number of times the algorithm retried with a new random seed. */
   public retries = 0;
+  /** The total time taken to find a fill. */
   public totalTime = 0;
+  /** The time taken for the successful try. */
   public tryTime = 0;
+  /** The time taken for the initial arc consistency check. */
   public initialArcConsistencyTime = 0;
+  /** The time taken for arc consistency checks after a choice. */
   public choiceArcConsistencyTime = 0;
+  /** The time taken for arc consistency checks after an elimination. */
   public eliminationArcConsistencyTime = 0;
 }
 

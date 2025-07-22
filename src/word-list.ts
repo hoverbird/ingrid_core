@@ -1,4 +1,5 @@
 import type { GlobalWordId, GlyphId, WordId } from "./types.ts";
+import { DupeIndex } from "./dupe-index.ts";
 
 /**
  * The expected maximum length for a single slot.
@@ -100,6 +101,9 @@ export function normalizeWord(canonical: string): string {
     .replace(/\s/g, "");
 }
 
+/**
+ * An error that occurs while loading a word list.
+ */
 export class WordListError extends Error {
   constructor(message: string) {
     super(message);
@@ -107,6 +111,9 @@ export class WordListError extends Error {
   }
 }
 
+/**
+ * Configuration for a word list source that is loaded from an in-memory array.
+ */
 export interface WordListSourceConfigMemory {
   type: "memory";
   id: string;
@@ -114,6 +121,9 @@ export interface WordListSourceConfigMemory {
   words: [string, number][];
 }
 
+/**
+ * Configuration for a word list source that is loaded from a file.
+ */
 export interface WordListSourceConfigFile {
   type: "file";
   id: string;
@@ -121,6 +131,9 @@ export interface WordListSourceConfigFile {
   path: string;
 }
 
+/**
+ * Configuration for a word list source that is loaded from a string.
+ */
 export interface WordListSourceConfigFileContents {
   type: "fileContents";
   id: string;
@@ -128,6 +141,9 @@ export interface WordListSourceConfigFileContents {
   contents: string;
 }
 
+/**
+ * Configuration describing a source of wordlist entries.
+ */
 export type WordListSourceConfig =
   | WordListSourceConfigMemory
   | WordListSourceConfigFile
@@ -172,7 +188,7 @@ export class WordList {
   /**
    * A dupe index reflecting the max substring length provided when configuring the `WordList`.
    */
-  public dupeIndex: any; // TODO: Port DupeIndex
+  public dupeIndex: DupeIndex;
 
   /**
    * The maximum word length provided when configuring the `WordList`, if any.
@@ -213,7 +229,7 @@ export class WordList {
     this.sourceConfigs = sourceConfigs;
     this.personalListIndex = personalListIndex;
     this.maxLength = maxLength;
-    // TODO: dupeIndex instantiation
+    this.dupeIndex = new DupeIndex(maxSharedSubstring ?? 0);
   }
 
   public async replaceList(
@@ -383,7 +399,7 @@ export class WordList {
     );
     this.wordIdByString.set(rawEntry.normalized, wordId);
 
-    // TODO: dupe_index.add_word
+    this.dupeIndex.addWord(wordId, this.words[wordLength][wordId]);
 
     return [wordLength, wordId];
   }

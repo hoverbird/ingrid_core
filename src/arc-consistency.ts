@@ -40,10 +40,17 @@ export interface ArcConsistencyAdapter {
   getGlyphCounts(slotId: SlotId): GlyphCountsByCell;
   getSingleOption(slotId: SlotId, eliminations: EliminationSet): WordId | undefined;
 }
+/**
+ * Result from a failed call to `establishArcConsistency`.
+ */
 export interface ArcConsistencyFailure {
+  /** A map from crossing ID to the amount to increase its weight by. */
   weightUpdates: Map<number, number>;
 }
 
+/**
+ * Result from a call to `establishArcConsistency`.
+ */
 export type ArcConsistencyResult = ArcConsistencyFailure | undefined;
 
 /**
