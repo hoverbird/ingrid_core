@@ -165,6 +165,18 @@ export async function findFill(
   const initialFixedSlots = slots.map(s => s.fixedWordId !== undefined);
   const initialSlotWeights = calculateSlotWeights(config, slots, crossingWeights);
 
+  const statistics = new Statistics();
+  const eliminationSets = slots.map(
+    (slot) => new EliminationSet(config.wordList.words[slot.length].length),
+  );
+  const adapter: ArcConsistencyAdapter = {
+    isWordEliminated: (slotId: SlotId, wordId: WordId) => slots[slotId].eliminations[wordId] !== undefined,
+    getGlyphCounts: (slotId: SlotId) => slots[slotId].glyphCountsByCell,
+    getSingleOption: (slotId: SlotId, eliminations: EliminationSet) => {
+      return config.slotOptions[slotId].find((wordId) => !eliminations.contains(wordId));
+    },
+  };
+
   if (!maintainArcConsistency(config, slots, crossingWeights, initialSlotWeights, { type: "Initial" }, statistics, eliminationSets, adapter)) {
     return { type: "HardFailure" };
   }

@@ -340,3 +340,80 @@ export interface Choice {
   slotId: SlotId;
   wordId: WordId;
 }
+
+/**
+ * Generate a `GridConfig` from a template string.
+ */
+export function generateGridConfigFromTemplateString(
+  wordList: WordList,
+  template: string,
+  minScore: number,
+): GridConfig {
+  const lines = template.trim().split("\n").map((l) => l.trim());
+  const height = lines.length;
+  const width = lines[0].length;
+
+  const fill: (GlyphId | undefined)[] = lines
+    .flatMap((line) => [...line])
+    .map((char) => {
+      if (char === "." || char === "#") {
+        return undefined;
+      }
+      return wordList.glyphIdByChar.get(char.toLowerCase());
+    });
+
+  const slotSpecs = generateSlotsFromTemplateString(template);
+  const { slotConfigs, crossingCount } = generateSlotConfigs(slotSpecs);
+
+  const slotOptions = slotConfigs.map((slot) => {
+    const entryFill = slot.getFill(fill, width);
+    return generateSlotOptions(
+      wordList,
+      entryFill,
+      slot.minScoreOverride ?? minScore,
+      slot.filterPattern,
+    );
+  });
+
+  return new GridConfig(
+    wordList,
+    fill,
+    slotConfigs,
+    slotOptions,
+    width,
+    height,
+    crossingCount,
+  );
+}
+/**
+ * Turn the given grid config and fill choices into a rendered string.
+ */
+export function renderGrid(config: GridConfig, choices: Choice[]): string {
+  const grid: (string | undefined)[] = config.fill.map((g) =>
+    g === undefined ? undefined : config.wordList.glyphs[g],
+  );
+
+  for (const { slotId, wordId } of choices) {
+    const slotConfig = config.slotConfigs[slotId];
+    const word = config.wordList.words[slotConfig.length][wordId];
+
+    for (const [cellIndex, glyph] of word.glyphs.entries()) {
+      const [x, y] = slotConfig.direction === Direction.Across
+        ? [slotConfig.startCell[0] + cellIndex, slotConfig.startCell[1]]
+        : [slotConfig.startCell[0], slotConfig.startCell[1] + cellIndex];
+      grid[y * config.width + x] = config.wordList.glyphs[glyph];
+    }
+  }
+
+  let output = "";
+  for (let y = 0; y < config.height; y++) {
+    for (let x = 0; x < config.width; x++) {
+      const char = grid[y * config.width + x];
+      output += char ?? ".";
+    }
+    if (y < config.height - 1) {
+      output += "\n";
+    }
+  }
+  return output;
+}
