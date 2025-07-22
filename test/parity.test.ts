@@ -26,23 +26,22 @@ Deno.test("Parity test with example-grid.txt", async () => {
   }
 
   const renderedGrid = renderGrid(gridConfig, result.choices);
-  const expectedGrid = `
-aced#notpc#cats
-tare#aeiou#alou
-tramptramptramp
-attila##sorrier
-###gulfs#leonia
-ahhomeatlast###
-loads#trees#mat
-moss#thatd#halo
-app#groks#sonos
-###cremebrulees
-accrue#seeme###
-trouble##mesons
-louisedelaramee
-acls#simon#wane
-side#seuss#snap
-`.trim();
 
-  assertEquals(renderedGrid, expectedGrid);
+  const command = new Deno.Command("ingrid_core", {
+    args: [
+      "--wordlist",
+      "./resources/XwiWordList.txt",
+      "--min-score",
+      "50",
+      "./example-grid.txt",
+    ],
+  });
+  const { code, stdout, stderr } = await command.output();
+  console.log("Rust stdout:", new TextDecoder().decode(stdout));
+  console.log("Rust stderr:", new TextDecoder().decode(stderr));
+  assertEquals(code, 0);
+
+  const rustOutput = new TextDecoder().decode(stdout).trim();
+
+  assertEquals(renderedGrid, rustOutput);
 });

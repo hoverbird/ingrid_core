@@ -1,33 +1,36 @@
 import type { WordId } from "./types.ts";
 import type { WordList } from "./word-list.ts";
 
-/**
- * Structure used to efficiently prune options based on their crossings.
- *
- * The outer array has an entry for each cell; each of these entries consists of an array
- * indexed by `GlyphId`, containing the number of times that glyph occurs in that position in
- * all of the available options.
- */
+export function weightedRandom(weights: number[]): number {
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  let random = Math.random() * totalWeight;
+  for (let i = 0; i < weights.length; i++) {
+    if (random < weights[i]) {
+      return i;
+    }
+    random -= weights[i];
+  }
+  return weights.length - 1;
+}
+
 export type GlyphCountsByCell = number[][];
 
-/**
- * Initialize the `glyph_counts_by_cell` structure for a slot.
- */
 export function buildGlyphCountsByCell(
   wordList: WordList,
-  slotLength: number,
+  length: number,
   options: WordId[],
 ): GlyphCountsByCell {
-  const result: GlyphCountsByCell = Array.from({ length: slotLength }, () =>
-    Array(wordList.glyphs.length).fill(0),
+  const glyphCountsByCell: GlyphCountsByCell = Array.from(
+    { length },
+    () => Array(wordList.glyphs.length).fill(0),
   );
 
   for (const wordId of options) {
-    const word = wordList.words[slotLength][wordId];
+    const word = wordList.words[length][wordId];
     for (const [cellIndex, glyph] of word.glyphs.entries()) {
-      result[cellIndex][glyph]++;
+      glyphCountsByCell[cellIndex][glyph]++;
     }
   }
 
-  return result;
+  return glyphCountsByCell;
 }

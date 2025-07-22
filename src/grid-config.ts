@@ -149,63 +149,56 @@ export interface SlotSpec {
  * - letters represent themselves
  */
 export function generateSlotsFromTemplateString(template: string): SlotSpec[] {
-  const lines = template.trim().split("\n").map((l) => l.trim());
+  function buildWords(grid: string[][]): GridCoord[][] {
+    const result: GridCoord[][] = [];
+    const paddedGrid = grid.map((row) => [...row, "#"]);
+    paddedGrid.push(Array(paddedGrid[0].length).fill("#"));
+
+    for (let y = 0; y < paddedGrid.length; y++) {
+      let currentWordCoords: GridCoord[] = [];
+      for (let x = 0; x < paddedGrid[y].length; x++) {
+        if (paddedGrid[y][x] === "#") {
+          if (currentWordCoords.length > 1) {
+            result.push(currentWordCoords);
+          }
+          currentWordCoords = [];
+        } else {
+          currentWordCoords.push([x, y]);
+        }
+      }
+    }
+    return result;
+  }
+
+  const lines = template.trim().split("\n").map((l) => l.split(""));
   const height = lines.length;
   const width = lines[0].length;
-  const grid: string[][] = lines.map((l) => [...l]);
 
   const slotSpecs: SlotSpec[] = [];
 
-  // Across slots
-  for (let y = 0; y < height; y++) {
-    let currentWord: GridCoord[] = [];
-    for (let x = 0; x < width; x++) {
-      if (grid[y][x] === "#") {
-        if (currentWord.length > 1) {
-          slotSpecs.push({
-            startCell: currentWord[0],
-            length: currentWord.length,
-            direction: Direction.Across,
-          });
-        }
-        currentWord = [];
-      } else {
-        currentWord.push([x, y]);
-      }
-    }
-    if (currentWord.length > 1) {
-      slotSpecs.push({
-        startCell: currentWord[0],
-        length: currentWord.length,
-        direction: Direction.Across,
-      });
+  for (const coords of buildWords(lines)) {
+    slotSpecs.push({
+      startCell: coords[0],
+      length: coords.length,
+      direction: Direction.Across,
+    });
+  }
+
+  const transposedGrid: string[][] = [];
+  for (let x = 0; x < width; x++) {
+    transposedGrid[x] = [];
+    for (let y = 0; y < height; y++) {
+      transposedGrid[x][y] = lines[y][x];
     }
   }
 
-  // Down slots
-  for (let x = 0; x < width; x++) {
-    let currentWord: GridCoord[] = [];
-    for (let y = 0; y < height; y++) {
-      if (grid[y][x] === "#") {
-        if (currentWord.length > 1) {
-          slotSpecs.push({
-            startCell: currentWord[0],
-            length: currentWord.length,
-            direction: Direction.Down,
-          });
-        }
-        currentWord = [];
-      } else {
-        currentWord.push([x, y]);
-      }
-    }
-    if (currentWord.length > 1) {
-      slotSpecs.push({
-        startCell: currentWord[0],
-        length: currentWord.length,
-        direction: Direction.Down,
-      });
-    }
+  for (const coords of buildWords(transposedGrid)) {
+    const retransposed = coords.map(([y, x]) => [x, y] as GridCoord);
+    slotSpecs.push({
+      startCell: retransposed[0],
+      length: retransposed.length,
+      direction: Direction.Down,
+    });
   }
 
   return slotSpecs;
@@ -219,21 +212,29 @@ export function generateSlotConfigs(
 ): { slotConfigs: SlotConfig[]; crossingCount: number } {
   const slotConfigs: SlotConfig[] = [];
 
-  const cellByLoc = new Map<string, { entries: { entryIndex: number; cellIndex: number }[] }>();
+  const cellByLoc: { coord: GridCoord; entries: { entryIndex: number; cellIndex: number }[] }[] = [];
 
   for (const [entryIndex, entry] of entries.entries()) {
     const coords = entry.direction === Direction.Across
-      ? Array.from({ length: entry.length }, (_, i) => [entry.startCell[0] + i, entry.startCell[1]])
-      : Array.from({ length: entry.length }, (_, i) => [entry.startCell[0], entry.startCell[1] + i]);
+      ? Array.from({ length: entry.length }, (_, i) => [entry.startCell[0] + i, entry.startCell[1]] as GridCoord)
+      : Array.from({ length: entry.length }, (_, i) => [entry.startCell[0], entry.startCell[1] + i] as GridCoord);
 
     for (const [cellIndex, loc] of coords.entries()) {
-      const key = loc.join(",");
-      if (!cellByLoc.has(key)) {
-        cellByLoc.set(key, { entries: [] });
+      let cell = cellByLoc.find((c) => c.coord[0] === loc[0] && c.coord[1] === loc[1]);
+      if (!cell) {
+        cell = { coord: loc, entries: [] };
+        cellByLoc.push(cell);
       }
-      cellByLoc.get(key)!.entries.push({ entryIndex, cellIndex });
+      cell.entries.push({ entryIndex, cellIndex });
     }
   }
+
+  cellByLoc.sort((a, b) => {
+    if (a.coord[1] !== b.coord[1]) {
+      return a.coord[1] - b.coord[1];
+    }
+    return a.coord[0] - b.coord[0];
+  });
 
   const constraintIdCache = new Map<string, number>();
   let crossingCount = 0;
@@ -244,9 +245,8 @@ export function generateSlotConfigs(
       : Array.from({ length: entry.length }, (_, i) => [entry.startCell[0], entry.startCell[1] + i]);
 
     const crossings = coords.map((loc) => {
-      const key = loc.join(",");
-      const cell = cellByLoc.get(key)!;
-      const crossingEntries = cell.entries.filter((e) => e.entryIndex !== entryIndex);
+      const cell = cellByLoc.find((c) => c.coord[0] === loc[0] && c.coord[1] === loc[1])!;
+      const crossingEntries = cell.entries.filter((e: { entryIndex: number; }) => e.entryIndex !== entryIndex);
 
       if (crossingEntries.length === 0) {
         return undefined;

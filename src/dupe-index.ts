@@ -117,6 +117,21 @@ export class DupeIndex implements AnyDupeIndex {
     return dupesByLength;
   }
 
+  public getDupes(slotId: number, wordId: WordId): Map<number, Set<WordId>> {
+    const dupes = new Map<number, Set<WordId>>();
+    const globalWordId: GlobalWordId = [slotId, wordId];
+    const dupesByLength = this.getDupesByLength(globalWordId);
+    for (const [length, wordIds] of dupesByLength.entries()) {
+      for (const dupeWordId of wordIds) {
+        if (!dupes.has(length)) {
+          dupes.set(length, new Set());
+        }
+        dupes.get(length)!.add(dupeWordId);
+      }
+    }
+    return dupes;
+  }
+
   public takeExtraDupes(): Map<GlobalWordId, GlobalWordId[]> {
     const extraDupes = this.extraDupesByWord;
     this.extraDupesByWord = new Map();
