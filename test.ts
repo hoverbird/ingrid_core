@@ -2,16 +2,8 @@ import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import * as ingridCore from "../lib/ingrid_core.js";
 import { parseGridString } from "../src/shared/gridParser";
 
-// Removed unused import as Deno.readTextFile is used instead
-// Load the word list from disk
-// console.log("Word list loaded successfully from disk:", wordList.slice(0, 100));
-
-// const testUrl = 'http://localhost:8000/resources/XwiWordList.txt';
 const testWordListPath = "./resources/XwiWordList.txt";
 const gridFilePath = "./resources/emptyGrid.txt";
-
-// const wordList = await Deno.readTextFile(testWordListPath);
-
 
 const gridContent =
   "#....\n" +
